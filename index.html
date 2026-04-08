@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clarity</title>
+  <title>Redirecting...</title>
   <style>
     body {
       margin: 0;
@@ -12,24 +12,14 @@
       align-items: center;
       justify-content: center;
       background: #F2EDE6;
-      font-family: 'DM Sans', Arial, sans-serif;
-    }
-    .loader {
-      text-align: center;
+      font-family: Arial, sans-serif;
     }
     .dot {
-      width: 12px;
-      height: 12px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       background: #2A5240;
-      animation: pulse 1.2s ease-in-out infinite;
-      margin: 0 auto;
-    }
-    .text {
-      margin-top: 12px;
-      font-size: 13px;
-      color: #999;
-      letter-spacing: 0.5px;
+      animation: pulse 1s ease-in-out infinite;
     }
     @keyframes pulse {
       0%, 100% { opacity: .3; transform: scale(.8); }
@@ -38,114 +28,55 @@
   </style>
 </head>
 <body>
-  <div class="loader">
-    <div class="dot"></div>
-    <div class="text">Redirecting...</div>
-  </div>
-  
+  <div class="dot"></div>
   <script>
-    // ============================================
-    // CONFIGURATION
-    // ============================================
     var SUPABASE_URL = 'https://gjweufogltwzescnauji.supabase.co';
     var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdqd2V1Zm9nbHR3emVzY25hdWppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MzUwNDQsImV4cCI6MjA5MDAxMTA0NH0.NStg2xuoq7Ec-qDaG0eI2-v8WQEYzZK0MVMAkauDN8g';
-    
-    // Fallback URL if QR code not found
-    var FALLBACK_URL = 'https://medimfarm.ro/Home/Index';
-    
-    // ============================================
-    // MAIN LOGIC
-    // ============================================
-    
+    var FALLBACK_URL = 'https://medimfarm.ro';
+
     function getSlug() {
-      // Extract slug from URL path
-      // Example: https://clarity-redirect.vercel.app/product-a → "product-a"
-      var path = window.location.pathname;
-      
-      // Remove leading and trailing slashes
-      var slug = path.replace(/^\/+/, '').replace(/\/+$/, '');
-      
-      // Clean up any URL encoding artifacts
-      slug = decodeURIComponent(slug);
-      
-      // Remove any file extensions that might have been added
-      slug = slug.replace(/\.html?$/i, '');
-      
-      console.log('Extracted slug:', slug || '(empty - will use default)');
-      
-      return slug;
+      var path = window.location.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
+      path = path.replace(/\.html$/, '');
+      return path;
     }
-    
+
     async function getDestination(slug) {
-      console.log('Looking up destination for slug:', slug || 'default');
-      
       try {
         if (slug) {
-          // Query by slug
+          var cacheBuster = '&_t=' + Date.now();
+          
           var res = await fetch(
             SUPABASE_URL +
               '/rest/v1/clarity_qrcodes?slug=eq.' +
               encodeURIComponent(slug) +
-              '&select=destination_url,name',
+              '&select=destination_url' +
+              cacheBuster,
             {
               headers: {
                 apikey: SUPABASE_ANON_KEY,
-                Authorization: 'Bearer ' + SUPABASE_ANON_KEY
+                Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache'
               }
             }
           );
           
           if (res.ok) {
             var rows = await res.json();
-            console.log('Supabase response:', rows);
-            
             if (rows && rows.length && rows[0].destination_url) {
-              console.log('Found QR code:', rows[0].name, '→', rows[0].destination_url);
               return rows[0].destination_url;
-            } else {
-              console.log('No QR code found for slug:', slug);
-            }
-          } else {
-            console.error('Supabase error:', res.status, await res.text());
-          }
-        } else {
-          // No slug - check for default config (optional)
-          console.log('No slug provided, checking for default config...');
-          
-          var res2 = await fetch(
-            SUPABASE_URL + '/rest/v1/clarity_config?id=eq.1&select=destination_url',
-            {
-              headers: {
-                apikey: SUPABASE_ANON_KEY,
-                Authorization: 'Bearer ' + SUPABASE_ANON_KEY
-              }
-            }
-          );
-          
-          if (res2.ok) {
-            var cfg = await res2.json();
-            if (cfg && cfg.length && cfg[0].destination_url) {
-              console.log('Using default config destination');
-              return cfg[0].destination_url;
             }
           }
         }
       } catch (e) {
-        console.error('Error fetching destination:', e);
+        console.error('Redirect error:', e);
       }
-      
-      console.log('Using fallback URL');
       return FALLBACK_URL;
     }
-    
+
     async function logScan(slug) {
-      // CRITICAL: Only log the actual slug, not file paths or anything else
-      var cleanSlug = slug || 'default';
-      
-      console.log('Logging scan for slug:', cleanSlug);
-      
       try {
-        var response = await fetch(SUPABASE_URL + '/rest/v1/clarity_scans', {
+        await fetch(SUPABASE_URL + '/rest/v1/clarity_scans', {
           method: 'POST',
           headers: {
             apikey: SUPABASE_ANON_KEY,
@@ -154,34 +85,20 @@
             Prefer: 'return=minimal'
           },
           body: JSON.stringify({
-            qr_slug: cleanSlug,
-            scanned_at: new Date().toISOString()
+            scanned_at: new Date().toISOString(),
+            qr_slug: slug || 'default'
           })
         });
-        
-        if (response.ok) {
-          console.log('Scan logged successfully');
-        } else {
-          console.error('Failed to log scan:', response.status, await response.text());
-        }
-      } catch (e) {
-        console.error('Error logging scan:', e);
-      }
+      } catch (e) {}
     }
-    
+
     async function run() {
-      console.log('=== Clarity QR Redirect ===');
-      console.log('Full URL:', window.location.href);
-      
       var slug = getSlug();
       var destination = await getDestination(slug);
-      
       logScan(slug);
-      
-      console.log('Redirecting to:', destination);
       window.location.replace(destination);
     }
-    
+
     run();
   </script>
 </body>
