@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Redirecting...</title>
   <style>
     body {
@@ -43,7 +46,7 @@
     async function getDestination(slug) {
       try {
         if (slug) {
-          var cacheBuster = '&_t=' + Date.now();
+          var cacheBuster = '&_cb=' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
           
           var res = await fetch(
             SUPABASE_URL +
@@ -52,25 +55,34 @@
               '&select=destination_url' +
               cacheBuster,
             {
+              method: 'GET',
               headers: {
-                apikey: SUPABASE_ANON_KEY,
-                Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache'
-              }
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+                'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+              },
+              cache: 'no-store'
             }
           );
           
           if (res.ok) {
             var rows = await res.json();
             if (rows && rows.length && rows[0].destination_url) {
+              console.log('✅ Found destination:', rows[0].destination_url);
               return rows[0].destination_url;
+            } else {
+              console.log('⚠️ No rows found for slug:', slug);
             }
+          } else {
+            console.log('❌ Fetch failed:', res.status, res.statusText);
           }
         }
       } catch (e) {
-        console.error('Redirect error:', e);
+        console.error('❌ Redirect error:', e);
       }
+      console.log('↩️ Using fallback:', FALLBACK_URL);
       return FALLBACK_URL;
     }
 
@@ -79,22 +91,28 @@
         await fetch(SUPABASE_URL + '/rest/v1/clarity_scans', {
           method: 'POST',
           headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
             'Content-Type': 'application/json',
-            Prefer: 'return=minimal'
+            'Prefer': 'return=minimal'
           },
           body: JSON.stringify({
             scanned_at: new Date().toISOString(),
             qr_slug: slug || 'default'
           })
         });
-      } catch (e) {}
+      } catch (e) {
+        console.error('Scan logging error:', e);
+      }
     }
 
     async function run() {
       var slug = getSlug();
+      console.log('🔍 Processing slug:', slug);
+      
       var destination = await getDestination(slug);
+      console.log('🎯 Final destination:', destination);
+      
       logScan(slug);
       window.location.replace(destination);
     }
