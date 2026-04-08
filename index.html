@@ -3,37 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Debug Mode</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Redirecting...</title>
   <style>
     body {
       margin: 0;
-      padding: 20px;
-      font-family: monospace;
-      background: #1a1a1a;
-      color: #0f0;
-      font-size: 14px;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #F2EDE6;
+      font-family: Arial, sans-serif;
     }
-    .log { margin: 5px 0; }
-    .error { color: #f00; }
-    .success { color: #0f0; }
-    .info { color: #0af; }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #2A5240;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: .3; transform: scale(.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
   </style>
 </head>
 <body>
-  <h2>🔍 Clarity Redirect Debug</h2>
-  <div id="log"></div>
+  <div class="dot"></div>
   <script>
     var SUPABASE_URL = 'https://gjweufogltwzescnauji.supabase.co';
     var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdqd2V1Zm9nbHR3emVzY25hdWppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MzUwNDQsImV4cCI6MjA5MDAxMTA0NH0.NStg2xuoq7Ec-qDaG0eI2-v8WQEYzZK0MVMAkauDN8g';
     var FALLBACK_URL = 'https://medimfarm.ro';
-
-    function log(msg, type = 'info') {
-      var div = document.createElement('div');
-      div.className = 'log ' + type;
-      div.textContent = new Date().toLocaleTimeString() + ' - ' + msg;
-      document.getElementById('log').appendChild(div);
-      console.log(msg);
-    }
 
     function getSlug() {
       var path = window.location.pathname.replace(/^\/+/, '').replace(/\/+$/, '');
@@ -43,66 +45,62 @@
 
     async function getDestination(slug) {
       try {
-        log('Starting redirect for slug: ' + slug, 'info');
-        
-        if (!slug) {
-          log('No slug found in URL!', 'error');
-          return FALLBACK_URL;
+        if (slug) {
+          var cacheBuster = '&_cb=' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+          
+          var res = await fetch(
+            SUPABASE_URL +
+              '/rest/v1/clarity_qrcodes?slug=eq.' +
+              encodeURIComponent(slug) +
+              '&select=destination_url' +
+              cacheBuster,
+            {
+              method: 'GET',
+              headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+                'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+              },
+              cache: 'no-store'
+            }
+          );
+          
+          if (res.ok) {
+            var rows = await res.json();
+            if (rows && rows.length && rows[0].destination_url) {
+              return rows[0].destination_url;
+            }
+          }
         }
+      } catch (e) {}
+      return FALLBACK_URL;
+    }
 
-        var url = SUPABASE_URL +
-          '/rest/v1/clarity_qrcodes?slug=eq.' +
-          encodeURIComponent(slug) +
-          '&select=destination_url';
-        
-        log('Fetching from: ' + url, 'info');
-        
-        var res = await fetch(url, {
+    async function logScan(slug) {
+      try {
+        await fetch(SUPABASE_URL + '/rest/v1/clarity_scans', {
+          method: 'POST',
           headers: {
             'apikey': SUPABASE_ANON_KEY,
-            'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
-          }
+            'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            scanned_at: new Date().toISOString(),
+            qr_slug: slug || 'default'
+          })
         });
-        
-        log('Response status: ' + res.status, res.ok ? 'success' : 'error');
-        
-        if (res.ok) {
-          var rows = await res.json();
-          log('Rows returned: ' + JSON.stringify(rows), 'info');
-          
-          if (rows && rows.length && rows[0].destination_url) {
-            log('Found destination: ' + rows[0].destination_url, 'success');
-            return rows[0].destination_url;
-          } else {
-            log('No matching QR code found in database', 'error');
-          }
-        } else {
-          var errorText = await res.text();
-          log('Fetch error: ' + errorText, 'error');
-        }
-      } catch (e) {
-        log('Exception: ' + e.message, 'error');
-        log('Stack: ' + e.stack, 'error');
-      }
-      
-      log('Using fallback: ' + FALLBACK_URL, 'info');
-      return FALLBACK_URL;
+      } catch (e) {}
     }
 
     async function run() {
       var slug = getSlug();
-      log('=== CLARITY REDIRECT DEBUG ===', 'info');
-      log('Current URL: ' + window.location.href, 'info');
-      log('Extracted slug: ' + slug, 'info');
-      
       var destination = await getDestination(slug);
-      
-      log('Final destination: ' + destination, 'success');
-      log('Redirecting in 3 seconds...', 'info');
-      
-      setTimeout(function() {
-        window.location.replace(destination);
-      }, 3000);
+      logScan(slug);
+      window.location.replace(destination);
     }
 
     run();
